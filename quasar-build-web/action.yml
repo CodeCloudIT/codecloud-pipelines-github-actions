@@ -1,0 +1,45 @@
+name: "quasar-build-web"
+description: Build web contents for Quasar
+inputs:
+  folder:
+    description: Folder to use the build command in
+    required: false
+    default: "./workflow/repository"
+runs:
+  using: "composite"
+  steps:
+    - name: Debug full file tree (including dotfiles)
+      run: |
+        echo "Full file tree of: ${{ inputs.folder }}"
+        shopt -s dotglob
+        find "${{ inputs.folder }}" -type f
+      shell: bash
+
+    - name: Use project-level .npmrc if present
+      run: |
+        if [ -f "${{ inputs.folder }}/.npmrc" ]; then
+          echo "Using repo .npmrc"
+          cp "${{ inputs.folder }}/.npmrc" ~/.npmrc
+        else
+          echo "No .npmrc found in project"
+        fi
+      shell: bash
+    - name: Install NodeJS
+      uses: actions/setup-node@v1
+      with:
+        node-version: 20
+    - name: Quasar Build Web
+      working-directory: ${{inputs.folder}}
+      run: |
+        npm install
+        npm i -g @quasar/cli
+        # Run ESLint but ignore errors
+        npm run lint || true
+        quasar build
+      shell: bash
+    - name: Upload quasar-web contents
+      uses: actions/upload-artifact@v4
+      with:
+        name: quasar-build-web
+        path: ${{inputs.folder}}/dist/spa
+        retention-days: 30

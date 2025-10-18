@@ -1,0 +1,90 @@
+name: "quasar-build-android"
+description: Build android contents for Quasar
+inputs:
+  app-name:
+    description: The name of the app (and keystore)
+    required: true
+  folder:
+    description: Folder to use the build command in
+    required: false
+    default: "./workflow/repository"
+  key-store-password:
+    description: The key-store password
+    required: true
+  mode:
+    description: Switch mode; capacitor or cordova
+    required: false
+    default: "capacitor" # Defaults to capacitor, can be overridden to cordova
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install NodeJS
+      uses: actions/setup-node@v1
+      with:
+        node-version: 20
+
+    - name: Set up Java 17
+      uses: actions/setup-java@v1
+      with:
+        java-version: "17"
+        distribution: "temurin"
+
+    - name: Install Dependencies
+      working-directory: ${{inputs.folder}}
+      run: |
+        npm install
+        npm i -g @quasar/cli
+        if [ "${{inputs.mode}}" == "cordova" ]; then
+          npm install -g cordova
+        else
+          npm install -g @capacitor/core @capacitor/cli
+        fi
+      shell: bash
+
+    - name: Setup Gradle
+      working-directory: ${{inputs.folder}}/src-capacitor/android
+      run: |
+        sudo apt-get install -y gradle
+        chmod +x ./gradlew
+      shell: bash
+
+    - name: Quasar Build Android
+      working-directory: ${{inputs.folder}}
+      run: |
+        if [ "${{inputs.mode}}" == "cordova" ]; then
+          quasar build -m cordova -T android --release
+        else
+          quasar build -m capacitor -T android --release
+        fi
+      shell: bash
+
+    - name: Run Gradle Assemble
+      working-directory: ${{inputs.folder}}/src-capacitor/android
+      run: |
+        ./gradlew assembleRelease
+      shell: bash
+
+    - name: Sign the app bundle
+      run: |
+        if [ "${{inputs.mode}}" == "cordova" ]; then
+          BUNDLE_PATH="${{inputs.folder}}/dist/cordova/android/bundle/release/app-release.aab"
+          SIGNED_BUNDLE_PATH="${{inputs.folder}}/dist/cordova/android/bundle/release/app-release-signed.aab"
+        else
+          BUNDLE_PATH="${{inputs.folder}}/src-capacitor/android/app/build/outputs/bundle/release/app-release.aab"
+          SIGNED_BUNDLE_PATH="${{inputs.folder}}/src-capacitor/android/app/build/outputs/bundle/release/app-release-signed.aab"
+        fi
+
+        jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore ${{inputs.folder}}/${{inputs.app-name}}.keystore -signedjar $SIGNED_BUNDLE_PATH $BUNDLE_PATH ${{inputs.app-name}} -storepass "${{inputs.key-store-password}}"
+      shell: bash
+
+    - name: Upload quasar-android contents
+      uses: actions/upload-artifact@v4
+      with:
+        name: quasar-build-android
+        path: |
+          if [ "${{inputs.mode}}" == "cordova" ]; then
+            ${{inputs.folder}}/dist/cordova
+          else
+            ${{inputs.folder}}/src-capacitor/android/app/build/outputs
+        retention-days: 30
