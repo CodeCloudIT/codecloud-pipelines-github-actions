@@ -27,7 +27,7 @@ runs:
     - name: Install NodeJS
       uses: actions/setup-node@v1
       with:
-        node-version: 20
+        node-version: 24
     - name: Quasar Build Web
       working-directory: ${{inputs.folder}}
       run: |
